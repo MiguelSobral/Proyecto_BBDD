@@ -43,3 +43,25 @@ SQL_TABLA_REVIEWS = """
                         FOREIGN KEY (reviewerID) REFERENCES usuarios(reviewerID),
                         FOREIGN KEY (asin, tipo_producto) REFERENCES productos(asin, tipo_producto)
                     );"""
+
+MENU = """
+========== MENU ==========
+1. Mostrar la evolución de reviews por años
+2. Evolucion de la popularidad de los articulos
+3. Histograma por nota
+4. Evolucion de las reviews a lo largo del tiempo para todas las categorias
+5. Histograma de reviews por usuario
+6. Nube de palabras por categoria
+7. Box plot de notas por categoria
+8. Salir
+"""
+OPCIONES_MENU = [f"{i}" for i in range(1, 9)]
+
+CATEGORIAS_VALIDAS = ["video games", "toys and games", "digital music", "musical instruments", "todos"]
+MAPEO_CATEGORIAS = {"video games": "Video_Games", "toys and games": "Toys_and_Games", "digital music": "Digital_Music", "musical instruments": "Musical_Instruments"}
+
+OPCIONES_HISTOGRAMA = """
+1. Por catoegoria o por todos
+2. Por articulo individual
+"""
+OPCIONES_HISTOGRAMA_POSIBLES = ["1", "2"]

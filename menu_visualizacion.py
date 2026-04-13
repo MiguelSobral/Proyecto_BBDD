@@ -37,9 +37,10 @@ def grafica_1():
         else:
             mapeo_categoria = cf.MAPEO_CATEGORIAS.get(categoria)
             sql = """
-                SELECT YEAR(reviewTime) AS anio, count(review_id) AS total_reviews
-                FROM reviews
-                WHERE tipo_producto = %s
+                SELECT YEAR(r.reviewTime) AS anio, count(r.review_id) AS total_reviews
+                FROM reviews r
+                    INNER JOIN productos p ON r.id_producto = p.id_producto
+                WHERE p.tipo_producto = %s
                 GROUP BY anio
                 ORDER BY anio ASC;
             """
@@ -71,9 +72,10 @@ def grafica_2():
 
         if categoria == "todos":
             sql = """
-                SELECT asin, tipo_producto, COUNT(review_id) AS total_reviews
-                FROM reviews
-                GROUP BY asin, tipo_producto
+                SELECT p.asin, p.tipo_producto, COUNT(r.review_id) AS total_reviews
+                FROM reviews r
+                    INNER JOIN productos p ON r.id_producto = p.id_producto
+                GROUP BY p.asin, p.tipo_producto
                 ORDER BY total_reviews DESC;
             """
             cursor.execute(sql)
@@ -81,10 +83,11 @@ def grafica_2():
         else:
             mapeo_categoria = cf.MAPEO_CATEGORIAS.get(categoria)
             sql = """
-                SELECT asin, COUNT(review_id) AS total_reviews
-                FROM reviews
-                WHERE tipo_producto = %s
-                GROUP BY asin
+                SELECT p.asin, p.tipo_producto, COUNT(r.review_id) AS total_reviews
+                FROM reviews r
+                    INNER JOIN productos p ON r.id_producto = p.id_producto
+                WHERE p.tipo_producto = %s
+                GROUP BY p.asin
                 ORDER BY total_reviews DESC;
             """
             cursor.execute(sql, (mapeo_categoria,))
@@ -93,10 +96,7 @@ def grafica_2():
 
     titulo = f"Evolucion de popularidad de {categoria}"
     
-    if categoria == "todos":
-        popularidad = [dato[2] for dato in datos]
-    else:
-        popularidad = [dato[1] for dato in datos]
+    popularidad = [dato[2] for dato in datos]
 
     ranking = list(range(1, len(popularidad) + 1))
 
@@ -152,9 +152,10 @@ def grafica_3():
             else:
                 mapeo_categoria = cf.MAPEO_CATEGORIAS.get(categoria)
                 sql = """
-                    SELECT overall, COUNT(review_id) AS total_reviews
-                    FROM reviews
-                    WHERE tipo_producto = %s
+                    SELECT r.overall, COUNT(r.review_id) AS total_reviews
+                    FROM reviews r
+                        INNER JOIN productos p ON r.id_producto = p.id_producto
+                    WHERE p.tipo_producto = %s
                     GROUP BY overall
                     ORDER BY overall ASC;
                 """
@@ -172,9 +173,10 @@ def grafica_3():
 
             elif len(posibles_categorias) == 1:
                 sql = """
-                    SELECT overall, COUNT(review_id) AS total_reviews
-                    FROM reviews
-                    WHERE asin = %s
+                    SELECT r.overall, COUNT(review_id) AS total_reviews
+                    FROM reviews r
+                        INNER JOIN productos p ON r.id_producto = p.id_producto
+                    WHERE p.asin = %s
                     GROUP BY overall
                     ORDER BY overall ASC;
                 """
@@ -192,10 +194,11 @@ def grafica_3():
                 mapeo_categoria = cf.MAPEO_CATEGORIAS.get(categoria)
 
                 sql = """
-                    SELECT overall, COUNT(review_id) AS total_reviews
-                    FROM reviews
-                    WHERE asin = %s
-                        AND tipo_producto = %s
+                    SELECT r.overall, COUNT(review_id) AS total_reviews
+                    FROM reviews r
+                        INNER JOIN productos p ON r.id_producto = p.id_producto
+                    WHERE p.asin = %s
+                        AND p.tipo_producto = %s
                     GROUP BY overall
                     ORDER BY overall ASC;
                 """
@@ -223,9 +226,10 @@ def grafica_4():
     with conexion:
         cursor = conexion.cursor()
         sql = """
-            SELECT tipo_producto, unixReviewTime
-            FROM reviews
-            ORDER BY tipo_producto, unixReviewTime;
+            SELECT p.tipo_producto, r.unixReviewTime
+            FROM reviews r
+                INNER JOIN productos p ON r.id_producto = p.id_producto
+            ORDER BY p.tipo_producto, unixReviewTime;
         """
         cursor.execute(sql)
 
@@ -291,12 +295,12 @@ def grafica_6():
         datos = coleccion.find({"tipo_producto": mapeo_categoria}, {"_id": 0, "summary": 1})
     
     resumenes = [dato["summary"] for dato in datos]
-    resumenes_concatenados = "".join(resumenes)
+    resumenes_concatenados = " ".join(resumenes)
 
     palabras = resumenes_concatenados.split(" ")
     palabras = [palabra for palabra in palabras if len(palabra) > 3]
 
-    palabras_concatenadas = "".join(palabras)
+    palabras_concatenadas = " ".join(palabras)
 
     nube = WordCloud().generate(palabras_concatenadas)
 
@@ -313,9 +317,10 @@ def grafica_7():
     with conexion:
         cursor = conexion.cursor()
         sql = """
-            SELECT tipo_producto, AVG(overall) AS media_overall
-            FROM reviews
-            GROUP BY tipo_producto
+            SELECT p.tipo_producto, AVG(r.overall) AS media_overall
+            FROM reviews r
+                INNER JOIN productos p ON r.id_producto = p.id_producto
+            GROUP BY p.tipo_producto
             ORDER BY media_overall ASC;
         """
         cursor.execute(sql)

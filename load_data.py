@@ -8,7 +8,6 @@ import configuracion as cf
 
 
 def conexion_mysql(db=None):
-
     return pymysql.connect(host=cf.MYSQL_HOST, user=cf.USER, password=cf.PASSWORD, database=db, autocommit=False)
 
 
@@ -50,6 +49,9 @@ def obtener_tipo_producto(ruta_fichero):
     elif "Musical_Instruments" in ruta_fichero:
         return "Musical_Instruments"
     
+    elif "Sports_and_Outdoors" in ruta_fichero:
+        return "Sports_and_Outdoors"
+    
     else:
         return "No se sabe"
     
@@ -72,10 +74,22 @@ def insertar_lote_mysql(cursor, filas_usuarios, filas_productos, filas_reviews):
     if filas_reviews:
         sql_reviews = """
             INSERT IGNORE INTO reviews
-            (reviewerID, asin, tipo_producto, overall, unixReviewTime, reviewTime, helpful_1, helpful_2)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+            (reviewerID, id_producto, overall, unixReviewTime, reviewTime, helpful_1, helpful_2)
+            VALUES (%s, %s, %s, %s, %s, %s, %s);
         """
         cursor.executemany(sql_reviews, filas_reviews)
+
+
+def id_productos(cursor, asin, tipo_producto):
+        sql = """
+            SELECT id_producto
+            FROM productos
+            WHERE asin = %s 
+                AND tipo_producto = %s
+        """
+        cursor.execute(sql, (asin, tipo_producto))
+
+        return cursor.fetchone()[0]
 
 
 def inserta_datos_mysql(ruta_fichero):
@@ -88,7 +102,6 @@ def inserta_datos_mysql(ruta_fichero):
 
         filas_usuarios = []
         filas_productos = []
-        filas_reviews = []
 
         with open(ruta_fichero, "r", encoding="utf-8") as f:
             for review in f:
@@ -96,6 +109,28 @@ def inserta_datos_mysql(ruta_fichero):
 
                 reviewerID = line.get("reviewerID")
                 reviewerName = line.get("reviewerName")
+                asin = line.get("asin")   
+
+                filas_usuarios.append((reviewerID, reviewerName))
+                filas_productos.append((asin, tipo_producto))
+
+                if len(filas_usuarios) == cf.MAX_LOTE:
+                    insertar_lote_mysql(cursor, filas_usuarios, filas_productos, [])
+                    conexion.commit()
+
+                    filas_usuarios.clear()
+                    filas_productos.clear()
+
+        insertar_lote_mysql(cursor, filas_usuarios, filas_productos, [])
+        conexion.commit()
+
+        filas_reviews = []
+
+        with open(ruta_fichero, "r", encoding="utf-8") as f:
+            for review in f:
+                line = json.loads(review.strip())
+
+                reviewerID = line.get("reviewerID")
                 asin = line.get("asin")   
                 overall = line.get("overall")
                 helpful_1 = line.get("helpful")[0]
@@ -105,20 +140,17 @@ def inserta_datos_mysql(ruta_fichero):
                 fecha_texto = line.get("reviewTime")
                 reviewTime = datetime.strptime(fecha_texto, "%m %d, %Y").date()
 
-                filas_usuarios.append((reviewerID, reviewerName))
-                filas_productos.append((asin, tipo_producto))
-                filas_reviews.append((reviewerID, asin, tipo_producto, overall, unixReviewTime, reviewTime, helpful_1, helpful_2))
+                id_producto = id_productos(cursor, asin, tipo_producto)
 
-                if len(filas_usuarios) == cf.MAX_LOTE:
-                    insertar_lote_mysql(cursor, filas_usuarios, filas_productos, filas_reviews)
+                filas_reviews.append((reviewerID, id_producto, overall, unixReviewTime, reviewTime, helpful_1, helpful_2))
+
+                if len(filas_reviews) == cf.MAX_LOTE:
+                    insertar_lote_mysql(cursor, [], [], filas_reviews)
                     conexion.commit()
 
-                    filas_usuarios.clear()
-                    filas_productos.clear()
                     filas_reviews.clear()
         
-        insertar_lote_mysql(cursor, filas_usuarios, filas_productos, filas_reviews)
-
+        insertar_lote_mysql(cursor, [], [], filas_reviews)
         conexion.commit()
 
 

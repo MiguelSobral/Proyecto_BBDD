@@ -5,24 +5,30 @@ from menu_visualizacion import elegir_categoria
 
 
 def conexion_neo4j():
-    return GraphDatabase.driver(
-        cf.NEO4J_URI,
-        auth=(cf.NEO4J_USER, cf.NEO4J_PASSWORD)
-    )
+    """
+    Función para establecer la conexión con Neo4j utilizando los parámetros de configuración
+    """
+    return GraphDatabase.driver(cf.NEO4J_URI, auth=(cf.NEO4J_USER, cf.NEO4J_PASSWORD))
 
 
 def limpiar_neo4j():
+    """
+    Funcion para eliminar todos los nodos y relaciones de la base de datos Neo4j, dejando la base de datos vacía
+    """
     driver = conexion_neo4j()
+
     with driver.session() as session:
         session.run("MATCH (n) DETACH DELETE n")
+
     driver.close()
 
 
-# =========================
-# APARTADO 4.1
-# =========================
+# 4.1
 
 def top_usuarios():
+    """
+    Funcion para obtener los usuarios con más reviews ordenados por número de reviews y reviewerID
+    """
     conexion = conexion_mysql(cf.MYSQL_DATABASE)
 
     with conexion:
@@ -38,18 +44,26 @@ def top_usuarios():
         cursor.execute(sql, (cf.TOP_USUARIOS_REVIEWS,))
         datos = cursor.fetchall()
 
+    # Devolvemos solo los reviewerID en una lista
     return [dato[0] for dato in datos]
 
 
 def rating_y_medias():
+    """
+    Funcion para obtener los ratings de cada usuario por cada artículo y la media de ratings de cada usuario, 
+    utilizando solo los usuarios obtenidos en top_usuarios
+    """
     conexion = conexion_mysql(cf.MYSQL_DATABASE)
 
+    # Si no hay usuarios, devolvemos diccionarios vacíos para evitar errores posteriores
     usuarios = top_usuarios()
     if len(usuarios) == 0:
         return {}, {}
 
+    # Creamos una cadena de placeholders para la consulta SQL, con tantos %s como usuarios haya
     usuarios_validos = ", ".join(["%s"] * len(usuarios))
 
+    # Inicializamos los diccionarios para almacenar los ratings por usuario, las sumas de ratings y el número de reviews
     ratings_por_usuario = {user: {} for user in usuarios}
     sumas_overall = {user: 0.0 for user in usuarios}
     num_reviews = {user: 0 for user in usuarios}
@@ -57,7 +71,7 @@ def rating_y_medias():
     with conexion:
         cursor = conexion.cursor()
         sql = f"""
-            SELECT r.reviewerID, p.asin, p.tipo_producto, r.overall
+            SELECT r.reviewerID, p.id_producto, r.overall
             FROM reviews r
                 INNER JOIN productos p ON r.id_producto = p.id_producto
             WHERE r.reviewerID IN ({usuarios_validos});
@@ -65,70 +79,89 @@ def rating_y_medias():
         cursor.execute(sql, tuple(usuarios))
         datos = cursor.fetchall()
 
-    for reviewerID, asin, tipo_producto, overall in datos:
-        item_id = (asin, tipo_producto)
-        ratings_por_usuario[reviewerID][item_id] = float(overall)
-        sumas_overall[reviewerID] += float(overall)
-        num_reviews[reviewerID] += 1
+    # Recorremos los datos obtenidos de SQL para llenar los diccionarios
+    for reviewerID, id_producto, overall in datos:
+        ratings_por_usuario[reviewerID][id_producto] = float(overall) # Guardamos el rating del usuario para ese producto
+        sumas_overall[reviewerID] += float(overall) # Sumamos el rating al total de ratings del usuario para luego calcular la media
+        num_reviews[reviewerID] += 1 # Contamos el número de reviews del usuario para luego calcular la media
 
+    # Inicializamos el diccionario de medias
     medias = {}
     for user in usuarios:
+        # Para cada usuario si ha hecho algun review (para evitar división por cero) calculamos su media de overall
         if num_reviews[user] > 0:
             medias[user] = float(sumas_overall[user] / num_reviews[user])
 
+    # Devolvemos el diccionario de ratings por usuario y el diccionario de medias por usuario
     return ratings_por_usuario, medias
 
 
 def correlacion(ratings_u, media_u, ratings_v, media_v):
+    """
+    Funcion para calcular la correlacion entre dos usuarios u y v, utilizando sus ratings y medias de ratings.
+    """
+    # Items que ambos usuarios han valorado en comun
     items_u_v = set(ratings_u.keys()) & set(ratings_v.keys())
 
+    # Si no hay items en comun, no se puede calcular la correlacion, devolvemos None
     if len(items_u_v) == 0:
         return None
 
+    # Inicializamos las variables para calcular el numerador y los denominadores de la formula de correlacion
     numerador = 0.0
     suma_1 = 0.0
     suma_2 = 0.0
 
+    # Para cada item valorado por ambos usuarios, sumamos lo debido, dicho por la formula del PDF
     for item in items_u_v:
         numerador += (ratings_u[item] - media_u) * (ratings_v[item] - media_v)
         suma_1 += (ratings_u[item] - media_u) ** 2
         suma_2 += (ratings_v[item] - media_v) ** 2
 
+    # Evitamos division por cero y devolvemos None
     if suma_1 == 0 or suma_2 == 0:
         return None
 
+    # Completamos la formula de correlacion y devolvemos el resultado
     return numerador / ((suma_1 ** 0.5) * (suma_2 ** 0.5))
 
 
 def calcular_similitudes():
-    usuarios = top_usuarios()
-    ratings_por_usuario, medias = rating_y_medias()
+    """
+    Formula para calcular las similitudes entre los usuarios obtenidos en top_usuarios
+    """
+    usuarios = top_usuarios() # Obtenemos los usuarios con más reviews
+    ratings_por_usuario, medias = rating_y_medias() # Obtenemos los ratings por usuario y las medias de ratings por usuario
 
+    # Inicializamos el diccionario de similitudes
     similitudes = {}
 
+    # Recorremos todos los pares de usuarios sin repetir ningun par
     for i in range(len(usuarios)):
         for j in range(i + 1, len(usuarios)):
             user_u = usuarios[i]
             user_v = usuarios[j]
 
+            # Si alguno de los usuarios no tiene media calculada (lo que significa que no tiene reviews), no se calcula nada
             if user_u not in medias or user_v not in medias:
                 continue
+            
+            # Calculamos la correlacion entre los dos usuarios 
+            correlacion_u_v = correlacion(ratings_por_usuario[user_u], medias[user_u], ratings_por_usuario[user_v], medias[user_v])
 
-            correlacion_u_v = correlacion(
-                ratings_por_usuario[user_u],
-                medias[user_u],
-                ratings_por_usuario[user_v],
-                medias[user_v]
-            )
-
+            # Si hay correlacion guardamos el par con el valor de la correlacion en el diccionario de similitudes
             if correlacion_u_v is not None:
                 key = (user_u, user_v)
                 similitudes[key] = float(correlacion_u_v)
 
+    # Devolvemos el diccionario de similitudes entre los usuarios
     return similitudes
 
 
 def cargar_similitudes_neo4J():
+    """
+    Funcion para cargar en Neo4j los usuarios que tienen alguna similitudcalculada entre ellos
+    """
     driver = conexion_neo4j()
     similitudes = calcular_similitudes()
 
@@ -140,17 +173,15 @@ def cargar_similitudes_neo4J():
                 MERGE (u)-[r:SIMILITUD]-(v)
                 SET r.correlacion = $correlacion_u_v
             """
-            session.run(
-                query,
-                user_u=user_u,
-                user_v=user_v,
-                correlacion_u_v=correlacion_u_v
-            )
+            session.run(query, user_u=user_u, user_v=user_v, correlacion_u_v=correlacion_u_v)
 
     driver.close()
 
 
 def usuario_mas_vecinos():
+    """
+    Funcion para obtener el usuario con más vecinos en Neo4j, el usuario que tiene más relaciones de tipo SIMILITUD
+    """
     driver = conexion_neo4j()
 
     with driver.session() as session:
@@ -165,6 +196,7 @@ def usuario_mas_vecinos():
 
     driver.close()
 
+    # Si no hay resultado, no hay usuarios cargados en Neo4j, si hay, lo mostramos por terminal
     if resultado is None:
         print("No hay usuarios cargados en Neo4j")
     else:
@@ -177,14 +209,18 @@ def opcion_1():
     usuario_mas_vecinos()
 
 
-# =========================
-# APARTADO 4.2
-# =========================
+# 4.2
 
 def pedir_num_articulos():
+    """
+    Funcion para pedir al usuario un número entero de artículos, validando que el número introducido sea un entero positivo
+    """
+    # Se asume que no es entero para entrar en el bucle
     entero = False
 
+    # Mientras no sea entero
     while not entero:
+        # intetentamos convertir la entrada a entero, si no se puede, se muestra un mensaje de error y se vuelve a pedir el número
         try:
             num_articulos = int(input("Elige una cantidad de articulos: "))
             if num_articulos <= 0:
@@ -194,10 +230,14 @@ def pedir_num_articulos():
         except ValueError:
             print("El numero introducido no es entero")
 
+    # Devolvemos el entero
     return num_articulos
 
 
 def obtener_articulos_aleatorios():
+    """
+    Funcion que obtiene una cantidad de artículos aleatorios de una categoría elegida por el usuario, validando que la cantidad de artículos solicitada no sea mayor que la cantidad de artículos disponibles en esa categoría, y devolviendo los ASINs de los artículos obtenidos y el tipo de producto correspondiente a la categoría elegida
+    """
     conexion = conexion_mysql(cf.MYSQL_DATABASE)
 
     categoria = elegir_categoria()

@@ -1,5 +1,4 @@
 from load_data import conexion_mysql
-import matplotlib.pyplot as plt
 import configuracion as cf
 import pandas as pd
 import os
@@ -8,6 +7,9 @@ import os
 
 
 def exportar_reviews_por_anio():
+    """
+    Funcion que exporta un CSV con el total de reviews por año, ordenados de forma ascendente por año
+    """
     conexion = conexion_mysql(cf.MYSQL_DATABASE)
 
     sql = """
@@ -22,6 +24,9 @@ def exportar_reviews_por_anio():
 
 
 def exportar_popularidad_articulos():
+    """
+    Funcion que exporta un CSV con el ranking de popularidad de los artículos, ordenados de forma descendente por total de reviews
+    """
     conexion = conexion_mysql(cf.MYSQL_DATABASE)
 
     sql = """
@@ -33,11 +38,15 @@ def exportar_popularidad_articulos():
     """
     df = pd.read_sql(sql, conexion)
 
+    # Añadimos manualmente la columna de ranking
     df.insert(0, "ranking", range(1, len(df) + 1))
     df.to_csv("CSVs_powerBI/popularidad_articulos.csv", index=False)
 
 
 def exportar_reviews_por_usuarios():
+    """
+    Funcion que exporta un CSV con el total de reviews por usuario, ordenados de forma descendente por total de reviews
+    """
     conexion = conexion_mysql(cf.MYSQL_DATABASE)
 
     sql = """
@@ -51,6 +60,9 @@ def exportar_reviews_por_usuarios():
 
 
 def recomendar_articulos(reviewerID, tipo_producto):
+    """
+    Funcion que dado un usuario y tipo de producto devuelve un ranking de los 10 artículos más populares que el usuario no ha revisado
+    """
     conexion = conexion_mysql(cf.MYSQL_DATABASE)
 
     with conexion:
@@ -76,10 +88,15 @@ def recomendar_articulos(reviewerID, tipo_producto):
         
         datos = cursor.fetchall()
 
+    # Devolvemos solo los ID de los productos recomendados
     return [dato[0] for dato in datos]
 
 
 def main():
+    """
+    Funcion principal que se encarga de generar los CSV necesarios para PowerBI
+    """
+    # Solamente de generan los CSV si no existen
     if not os.exists("CSVs_powerBI"):
         os.makedirs("CSVs_powerBI", exist_ok=True)
         exportar_reviews_por_anio()
@@ -88,8 +105,6 @@ def main():
         print("Se han generado los CSV para PowerBI")
 
     
-
-
 
 
 if __name__ == "__main__":

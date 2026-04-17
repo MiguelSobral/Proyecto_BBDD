@@ -295,8 +295,9 @@ def grafica_4():
 
     # Para cada dato conseguido de SQL se suma 1 al numero de reviews de esa categoria y se añade una tupla con el unixReviewTime y el numero de reviews de esa categoria hasta es momento
     for categoria, unixtime in datos:
-        reviews[categoria] += 1
-        series_grafica[categoria].append((unixtime, reviews[categoria]))
+        if categoria in reviews:
+            reviews[categoria] += 1
+            series_grafica[categoria].append((unixtime, reviews[categoria]))
 
     # Se muestra el grafico de lineas con el unixReviewTime en el eje x y el numero de reviews en el eje y, una linea para cada categoria
     plt.figure(figsize=(10, 6))

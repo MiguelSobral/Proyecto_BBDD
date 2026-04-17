@@ -97,7 +97,7 @@ def main():
     Funcion principal que se encarga de generar los CSV necesarios para PowerBI
     """
     # Solamente de generan los CSV si no existen
-    if not os.exists("CSVs_powerBI"):
+    if not os.path.exists("CSVs_powerBI"):
         os.makedirs("CSVs_powerBI", exist_ok=True)
         exportar_reviews_por_anio()
         exportar_popularidad_articulos()
